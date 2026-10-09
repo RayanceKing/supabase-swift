@@ -5,10 +5,6 @@
 //  Created by Guilherme Souza on 26/08/26.
 //
 
-import Foundation
-import Helpers
-import IssueReporting
-
 // MARK: - Array operands
 //
 // `cs`, `cd` and `ov` each get three methods, because the operand literal is chosen by the
@@ -110,26 +106,13 @@ extension _PostgrestFilterableExpression where Value: _PostgrestJSONColumnValue 
   /// - Parameter json: Any JSON value. An object matches rows holding at least those keys and
   ///   values; on an array column, `[20]` or `20` matches arrays holding `20`.
   public func containsJSON(_ json: JSONValue) -> _PostgrestFilter<Root> {
-    _PostgrestFilter(column: postgrestExpression, operator: .contains, value: jsonOperand(json))
+    _PostgrestFilter(column: postgrestExpression, operator: .contains, value: json)
   }
 
   /// Matches rows where this `jsonb` column is contained by `json`.
   public func containedByJSON(_ json: JSONValue) -> _PostgrestFilter<Root> {
-    _PostgrestFilter(column: postgrestExpression, operator: .containedBy, value: jsonOperand(json))
+    _PostgrestFilter(column: postgrestExpression, operator: .containedBy, value: json)
   }
-}
-
-/// `JSONValue`'s ``PostgrestFilterValue/rawValue`` is its filter form — an `.array` as the Postgres
-/// literal `{20}`, a `.string` bare — and `jsonb` reads both as `22P02`.
-private func jsonOperand(_ json: JSONValue) -> String {
-  let encoder = JSONEncoder()
-  encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-  guard let data = try? encoder.encode(json) else {
-    // Only a non-finite `.double` fails to encode. `null` contains nothing a column holds.
-    reportIssue("Failed to encode \(json) as a jsonb filter operand.")
-    return "null"
-  }
-  return String(decoding: data, as: UTF8.self)
 }
 
 // MARK: - Text search

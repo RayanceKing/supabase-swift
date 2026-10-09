@@ -7,6 +7,7 @@
 
 import Foundation
 import Helpers
+import IssueReporting
 
 /// One node of a filter tree, without the relation type: the typed ``_PostgrestFilter`` wraps
 /// one, and the untyped ``PostgrestRequestBuilder`` builds one from a string column, so both
@@ -66,7 +67,8 @@ public struct _PostgrestFilter<R: _PostgrestRelation>: Sendable {
   }
 
   init(column: String, operator: _PostgrestFilterOperator, value: some PostgrestFilterValue) {
-    self.node = .comparison(column: column, operator: `operator`, operand: .value(value.rawValue))
+    self.node = .comparison(
+      column: column, operator: `operator`, operand: .value(filterOperand(value)))
   }
 
   init(column: String, operator: _PostgrestFilterOperator, operand: Operand) {
@@ -137,6 +139,24 @@ prefix public func ! <R>(operand: _PostgrestFilter<R>) -> _PostgrestFilter<R> {
 }
 
 // MARK: - Rendering
+
+/// The operand a typed filter sends for `value`.
+///
+/// A `JSONValue` only reaches a typed filter from a `json`/`jsonb` expression, and PostgREST reads
+/// that operand as JSON. `JSONValue`'s ``PostgrestFilterValue/rawValue`` is its filter form
+/// instead — a `.string` bare, an `.array` as the Postgres literal `{20}`, `.null` as `NULL` — so
+/// it is encoded as JSON here. The untyped builder keeps the filter form.
+func filterOperand(_ value: some PostgrestFilterValue) -> String {
+  guard let json = value as? JSONValue else { return value.rawValue }
+  let encoder = JSONEncoder()
+  encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+  guard let data = try? encoder.encode(json) else {
+    // Only a non-finite `.double` fails to encode, and `jsonb` cannot hold one.
+    reportIssue("Failed to encode \(json) as a jsonb filter operand.")
+    return "null"
+  }
+  return String(decoding: data, as: UTF8.self)
+}
 
 extension PostgrestFilterNode.Operand {
   /// The operand as sent at top level, where a value runs to the end of the parameter and needs

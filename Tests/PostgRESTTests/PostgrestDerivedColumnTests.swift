@@ -93,12 +93,43 @@ struct PostgrestDerivedColumnTests {
         == #"settings=cs.{"theme":"dark"}"#)
   }
 
-  /// A path keeps its receiver's `Value`, so `->` chains on and filters by containment.
+  /// `->` produces `jsonb`, so a path is a `JSONValue` whatever the column decodes as, and chains
+  /// on and filters by containment.
   @Test
-  func aJSONObjectPathChainsAndFiltersByContainment() {
-    let meta = Item.columns.data.jsonObject("meta")
+  func jsonObjectReturnsJSONValue() {
+    let meta: _PostgrestDerivedExpression<Item, JSONValue, _PostgrestEveryPosition> =
+      Item.columns.data.jsonObject("meta")
     #expect(meta.jsonText("k").postgrestExpression == #"data->"meta"->>"k""#)
     #expect(rendered(meta.containsJSON(["c": 2])) == #"data->"meta"=cs.{"c":2}"#)
+
+    let theme: _PostgrestDerivedExpression<Item, JSONValue, _PostgrestEveryPosition> =
+      Item.columns.settings.jsonObject("theme")
+    #expect(rendered(theme.eq("dark")) == #"settings->"theme"=eq."dark""#)
+  }
+
+  /// PostgREST reads a `jsonb` comparison's operand as JSON. In filter form `.string("1")` went out
+  /// as `eq.1` and matched the number 1, and `.null` as `eq.NULL`, a `22P02`.
+  @Test
+  func aJSONComparisonEncodesItsOperandAsJSON() {
+    let a = Item.columns.data.jsonObject("a")
+    #expect(rendered(a.eq("1")) == #"data->"a"=eq."1""#)
+    #expect(rendered(a.eq(1)) == #"data->"a"=eq.1"#)
+    #expect(rendered(a.gt(2)) == #"data->"a"=gt.2"#)
+    #expect(rendered(a.eq(.null)) == #"data->"a"=eq.null"#)
+    #expect(rendered(a.eq(["c": 2])) == #"data->"a"=eq.{"c":2}"#)
+    #expect(rendered(a.neq("1")) == #"data->"a"=neq."1""#)
+    #expect(rendered(a.isDistinct("1")) == #"data->"a"=isdistinct."1""#)
+    #expect(rendered(Item.columns.data.eq(["a": 1])) == #"data=eq.{"a":1}"#)
+  }
+
+  /// List members and grouped operands are JSON first, then quoted like any other value.
+  @Test
+  func aJSONOperandIsQuotedInAListAndAGroup() {
+    let a = Item.columns.data.jsonObject("a")
+    #expect(rendered(a.in(["1", 2])) == #"data->"a"=in.("\"1\"",2)"#)
+    #expect(
+      rendered(a.eq("x,y") || Item.columns.cost.eq(2))
+        == #"or=(data->"a".eq."\"x,y\"",cost.eq.2.0)"#)
   }
 
   /// Bare, `->0` is an array index and `->a.b` is a `PGRST100`; quoted, both reach the key.
