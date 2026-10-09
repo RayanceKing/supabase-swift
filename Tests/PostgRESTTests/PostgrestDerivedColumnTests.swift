@@ -17,14 +17,21 @@ struct PostgrestDerivedColumnTests {
     static let selectString = "*"
 
     var cost: Double
-    var data: String
+    var data: JSONValue
+    var settings: Settings
 
     struct Columns: Sendable {
       let cost = _PostgrestColumn<Item, Double>("cost")
-      let data = _PostgrestColumn<Item, String>("data")
+      let data = _PostgrestColumn<Item, JSONValue>("data")
+      let settings = _PostgrestColumn<Item, Settings>("settings")
     }
 
     static let columns = Columns()
+  }
+
+  /// An app's own decoded shape for a `jsonb` column, opted in to the JSON methods.
+  struct Settings: Codable, _PostgrestJSONColumnValue {
+    var theme: String
   }
 
   private func rendered(_ filter: _PostgrestFilter<Item>) -> String {
@@ -49,14 +56,15 @@ struct PostgrestDerivedColumnTests {
     #expect((costText as Any) is any _PostgrestOrderableExpression == false)
   }
 
-  /// A JSON path chained onto a cast still compiles — both are declared on the base protocol —
-  /// but it inherits the cast's select-only position, so it can no longer be filtered on.
+  /// A JSON path on a cast to `.text` does not compile, since `String` is not a JSON column type.
+  /// On a cast to a JSON type it compiles, but inherits the cast's select-only position.
   /// PostgREST rejects `cost::text->>k` in every position, so select-only is as tight as the
   /// type system can get here without forbidding the chain outright.
   @Test
   func castingThenJSONPathInheritsTheCastsSelectOnlyPosition() {
-    let composed = Item.columns.cost.cast(to: .text).jsonText("k")
-    #expect(composed.postgrestExpression == #"cost::text->>"k""#)
+    let composed = Item.columns.cost.cast(to: _PostgrestCastTarget<JSONValue>("jsonb")).jsonText(
+      "k")
+    #expect(composed.postgrestExpression == #"cost::jsonb->>"k""#)
     #expect((composed as Any) is any _PostgrestFilterableExpression == false)
     #expect((composed as Any) is any _PostgrestOrderableExpression == false)
   }
@@ -72,6 +80,25 @@ struct PostgrestDerivedColumnTests {
   func jsonPathsRenderTheirArrows() {
     #expect(Item.columns.data.jsonText("name").postgrestExpression == #"data->>"name""#)
     #expect(Item.columns.data.jsonObject("meta").postgrestExpression == #"data->"meta""#)
+  }
+
+  /// A column of the app's own type has the JSON methods once the type opts in. A `String` or
+  /// `Double` column has none: `$0.cost.jsonText("k")` and `$0.cost.containsJSON([:])` do not
+  /// compile, where they used to answer `42883`.
+  @Test
+  func anOptedInAppTypeHasTheJSONMethods() {
+    #expect(Item.columns.settings.jsonText("theme").postgrestExpression == #"settings->>"theme""#)
+    #expect(
+      rendered(Item.columns.settings.containsJSON(["theme": "dark"]))
+        == #"settings=cs.{"theme":"dark"}"#)
+  }
+
+  /// A path keeps its receiver's `Value`, so `->` chains on and filters by containment.
+  @Test
+  func aJSONObjectPathChainsAndFiltersByContainment() {
+    let meta = Item.columns.data.jsonObject("meta")
+    #expect(meta.jsonText("k").postgrestExpression == #"data->"meta"->>"k""#)
+    #expect(rendered(meta.containsJSON(["c": 2])) == #"data->"meta"=cs.{"c":2}"#)
   }
 
   /// Bare, `->0` is an array index and `->a.b` is a `PGRST100`; quoted, both reach the key.

@@ -63,7 +63,27 @@ extension _PostgrestColumnExpression {
   ) -> _PostgrestDerivedExpression<Root, T, _PostgrestSelectOnly> {
     _deriving("::\(target.sqlType)")
   }
+}
 
+/// A Swift type that stands for a `json`/`jsonb` column.
+///
+/// A column of a conforming type gets the JSON path methods, `jsonText(_:)` and
+/// `jsonObject(_:)`, and the containment filters, `containsJSON(_:)` and `containedByJSON(_:)`.
+///
+/// The generator types every `json`/`jsonb` column as `JSONValue`, which conforms. A column you
+/// decode as your own type opts in with an empty conformance:
+///
+/// ```swift
+/// extension Settings: _PostgrestJSONColumnValue {}
+/// ```
+///
+/// Without it, the JSON methods do not compile on a `text` or numeric column, which the server
+/// would answer with `42883 operator does not exist`.
+public protocol _PostgrestJSONColumnValue {}
+
+extension JSONValue: _PostgrestJSONColumnValue {}
+
+extension _PostgrestColumnExpression where Value: _PostgrestJSONColumnValue {
   /// Reads a `json`/`jsonb` object key as text, with `->>`.
   ///
   /// ```swift
