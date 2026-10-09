@@ -151,9 +151,11 @@ func filterOperand(_ value: some PostgrestFilterValue) -> String {
   let encoder = JSONEncoder()
   encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
   guard let data = try? encoder.encode(json) else {
-    // Only a non-finite `.double` fails to encode, and `jsonb` cannot hold one.
+    // Only a non-finite `.double` fails to encode. `NaN` is not JSON, so PostgREST answers
+    // `22P02` and the request fails, even inside `or=(…)`. Any valid stand-in, such as `null`,
+    // would match other rows, and a `delete` would remove them.
     reportIssue("Failed to encode \(json) as a jsonb filter operand.")
-    return "null"
+    return "NaN"
   }
   return String(decoding: data, as: UTF8.self)
 }
