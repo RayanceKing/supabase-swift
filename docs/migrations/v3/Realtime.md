@@ -114,8 +114,12 @@ Changes that still compile but behave differently. Check each one by hand.
 - **`SupabaseClient` uses the global logger for Realtime when you pass none.** A `logger:` you
   pass in `SupabaseClient.Configuration.Realtime` is kept. With `nil`, the default, Realtime uses
   `Configuration.Global.logger`.
-- **No global `URLSession` for the WebSocket.** Realtime no longer takes the global session. For
-  certificate pinning, pass a transport (see [`session:` is replaced by
+- **The WebSocket shares the global session's delegate, not the session.** With no
+  `webSocketTransport`, `SupabaseClient` builds the WebSocket from the configuration and delegate
+  of a `URLSessionTransport` in the HTTP settings, so certificate pinning covers the upgrade. The
+  delegate runs on that session's `delegateQueue`. A
+  custom `ClientTransport` hides its session: Realtime logs a warning and uses the default
+  transport. Then pass a transport yourself (see [`session:` is replaced by
   `webSocketTransport:`](#session-is-replaced-by-websockettransport)).
 - **The `accessToken` callback is called less often, and before the token expires.** The client
   calls it at most once every 10 seconds; `setAuth()` inside that window keeps the current

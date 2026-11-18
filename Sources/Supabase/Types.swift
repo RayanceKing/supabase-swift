@@ -375,12 +375,16 @@ extension SupabaseClient {
       public var serverLogLevel: RealtimeServerLogLevel?
 
       /// The WebSocket stack the client connects with. `nil` uses
-      /// ``URLSessionWebSocketTransport``.
+      /// ``URLSessionWebSocketTransport``. When the Realtime HTTP transport (``http``, else the
+      /// global one) is a ``URLSessionTransport`` whose session has a delegate, that transport
+      /// uses the session's configuration and delegate, and calls the delegate on the session's
+      /// `delegateQueue`. So certificate pinning also covers the WebSocket upgrade.
       public var webSocketTransport: (any WebSocketTransport)?
 
       /// Overrides ``SupabaseClient/Configuration/Global/http`` for `RealtimeChannel.httpSend`
       /// calls, field by field: a `nil` transport or timeout falls back to the global one, and its
-      /// middlewares run after the global ones. `nil` uses the global configuration as is.
+      /// middlewares run after the global ones. `nil` uses the global configuration as is. Its
+      /// transport also decides the session delegate of the WebSocket; see ``webSocketTransport``.
       public var http: HTTPClientConfiguration?
 
       /// Overrides ``SupabaseClient/Configuration/Global/logger`` for Realtime. `nil` uses the
